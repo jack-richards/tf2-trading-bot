@@ -1,0 +1,47 @@
+{
+  "name": "trading-bot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/app.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "nodemon src/app.ts",
+    "start": "node dist/app.js",
+    "lint": "eslint . --ext .ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jack-richards/trading-bot.git"
+  },
+  "author": "Jack Samuel Richards",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/jack-richards/trading-bot/issues"
+  },
+  "homepage": "https://github.com/jack-richards/trading-bot#readme",
+  "devDependencies": {
+    "@types/amqplib": "^0.10.5",
+    "globals": "^15.8.0",
+    "nodemon": "^3.1.4",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.4",
+    "typescript-eslint": "^7.18.0"
+  },
+  "dependencies": {
+    "@eslint/js": "^8.56.0",
+    "@tf2-automatic/bot-data": "^7.2.0",
+    "@tf2-automatic/bot-manager-data": "^7.2.0",
+    "@tf2autobot/tf2-currencies": "^2.0.1",
+    "@tf2autobot/tf2-schema": "^4.5.0",
+    "@tf2autobot/tf2-sku": "^2.0.4",
+    "amqp-connection-manager": "^4.1.14",
+    "amqplib": "^0.10.4",
+    "axios": "^1.7.2",
+    "eslint": "^8.56.0",
+    "pg": "^8.12.0",
+    "socket.io-client": "^4.7.5",
+    "tf2-item-format": "^5.9.16",
+    "tf2automatic-bptf-manager": "github:Hhanuska/tf2automatic-bptf-manager"
+  }
+}

@@ -1,0 +1,6 @@
+{
+    "minKeys": 20,
+    "maxKeys": 200,
+    "minRef": 200,
+    "maxRef": 400
+}
