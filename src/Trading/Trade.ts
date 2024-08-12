@@ -10,15 +10,18 @@ import Currencies from "@tf2autobot/tf2-currencies";
 import { MappedItems } from "../Inventory/types/mappedItems";
 import { OfferQueueManager } from "./OfferQueueManager";
 import { TradeOffer } from "@tf2-automatic/bot-data";
+import { IPartialPricing } from "../Pricelist/IPartialPricing";
+import { tradeItem } from "./types/tradeItem";
 
 export class Trade {
     private inventory: IInventoryManager;
     private pricelist: IPricelist;
     private autokeys: AutoKeys
-
+    private partialPricing: IPartialPricing;
     private offerQueueManager: OfferQueueManager;
+    private temporalPriceStorage: Map<string, tradeItem[]> = new Map();
 
-    constructor(inventory: IInventoryManager, pricelist: IPricelist, autokeys: AutoKeys) {
+    constructor(inventory: IInventoryManager, pricelist: IPricelist, autokeys: AutoKeys, partialPricing: IPartialPricing) {
         this.inventory = inventory;
         this.pricelist = pricelist;
         this.autokeys = autokeys;
@@ -47,20 +50,50 @@ export class Trade {
                     const id = message.data.offer.id;
                     await this.confirmOffer(id);
                     break;
-                case 'trades_changed':
-                    const offer = message.data.offer;
+                case 'trades.changed':
+                    const offer: TradeOffer = message.data.offer;
                     const offerState: TradeOffer['state'] = offer.state;
 
-                    if (offerState && 
-                        offerState === 1 || // Invalid.
-                        offerState === 3 || // Accepted.
-                        offerState === 5 || // Expired.
-                        offerState === 6 || // Canceled.
-                        offerState === 7 || // Declined.
-                        offerState === 8 || // Invalid items.
-                        offerState === 10 // Cancelled by two-factor.
-                    ) {
-                        this.offerQueueManager.markTradeAsComplete(offer.id);
+                    /*
+                    offerState === 1 || // Invalid.
+                    offerState === 3 || // Accepted.
+                    offerState === 5 || // Expired.
+                    offerState === 6 || // Canceled.
+                    offerState === 7 || // Declined.
+                    offerState === 8 || // Invalid items.
+                    offerState === 10 // Cancelled by two-factor. 
+                    */
+
+                    if (offerState &&
+                        offerState === 3) {
+                        // Map contains priced items, currencies are already filtered out.
+                        const itemsReceived: tradeItem[] = this.temporalPriceStorage.get(offer.id);
+                        if (itemsReceived) {
+                            await this.partialPricing.recordPurchase(itemsReceived);
+                        }
+
+                        const itemsGiven = this.inventory.mapItemsToObjects(offer.itemsToGive);
+                        // Remove any traded away items that were marked as 'purchased' in our records.
+                        // Need to consider a scenario where for whatever reason a error occurs while attempting to delete
+                        // thus leaving the item in the purchase table, what impacts would this have?
+
+                        // Above point should be solved by us searching purchased_item table using assetid paired with sku.
+                        await this.partialPricing.removePurchase(itemsGiven.itemsArray);
+
+                        // Check if we have given a key used to originally create a autokeys sell listing.
+                        await this.autokeys.validateKeySellListing(offer);
+                    }
+
+                    console.log("Trade complete - code: " + offerState);
+                    this.offerQueueManager.markTradeAsComplete(offer.id);
+                    break;
+                case 'trades.error':
+                    // This event occurs upon a unrecoverable error todo with a trade.
+                    const offerID = message?.data?.job?.raw?.id;
+                    console.error(message);
+                    if (offerID) {
+                        this.temporalPriceStorage.delete(offerID);
+                        this.offerQueueManager.markTradeAsComplete(offerID);
                     }
                     break;
                 default:
@@ -130,10 +163,10 @@ export class Trade {
         const keyPriceObject: KeyPrice = await this.pricelist.getKeyPrice();
 
         let keysBothSides = false;
+        let hasKeysAndItemsOnSameSide = false;
         // If no keys are involved just metal and a item we set the key rate to the buy price.
         let keyOurSide = false;
         let onlyMetal = false;
-        // const itemsAndKeys = false; TODO.
 
         // Convert the array back to a Map
         const toGiveCurrenciesMap = new Map<string, string[]>(itemsToGive.currenciesMap);
@@ -148,6 +181,31 @@ export class Trade {
         onlyMetal = this.isOnlyMetal(itemsToGive, itemsToReceive, toGiveCurrenciesMap, toReceiveCurrenciesMap);
         // Decline trade offers involving only pure metal (no keys or items).
         if (onlyMetal) {
+            return false;
+        }
+
+        /** Decline trades that involve both keys and items on the same side.
+    
+            This mitigates a exploit where the user can create an offer like the following:
+            - Their Side: 3 keys, 1 item.
+            - Our Side: 0 keys, metal equivalent to value of their item + combined key buy price.
+
+            If allowed this would mean our bot would be effectively buying keys while under the impression it is a regular trade.
+            The user would be able to bypass our key stock limits and force us to sell keys.
+
+            The same could be done if the user wants to buy keys from us, force us to sell.
+
+            The downside to preventing such a scenario and thereby disabling keys and items on the same side
+            is that the user cannot create a offer asking to both sell and buy items at the same time, given
+            the values on both sides amount to above a key.
+
+            Though I think that this is a reasonable compromise since most offers are received through backpack.tf listings
+            which are for individual items.
+        */
+        
+        hasKeysAndItemsOnSameSide = this.hasKeysAndItemsOnSameSide(itemsToGive, itemsToReceive);
+        if (hasKeysAndItemsOnSameSide) {
+            console.log("Trade involves both keys and items on the same side, declining...");
             return false;
         }
 
@@ -172,6 +230,18 @@ export class Trade {
             }
         } catch (e) {
             console.log(e);
+            return false;
+        }
+
+        // TODO. We make the assumption with the current logic that we will have a stock limit of 1 for all items.
+        // If in future I want to adjust the stock limits to be higher I will need to reevaluate this area and other
+        // parts of my design.
+        try {
+            // Update item prices based on purchase history before evaluating the trade.
+            itemsToGive.itemsArray = await this.partialPricing.applyPartialPricingAdjustments(itemsToGive.itemsArray, keyRate);
+        } catch (e) {
+            console.error(e);
+            console.log("Trade Manager: Failed to update sell price based on purchase history of items.");
             return false;
         }
 
@@ -201,6 +271,24 @@ export class Trade {
 
         // Not overstocked on any of the items given in trade and value is in our favour.
         return true;
+    }
+
+    // Check if keys and items are on the same side of the trade (on either side).
+    private hasKeysAndItemsOnSameSide = (itemsToGive: ItemsToGiveOrReceive, itemsToReceive: ItemsToGiveOrReceive): boolean => {
+        const toGiveCurrenciesMap = new Map<string, string[]>(itemsToGive.currenciesMap);
+        const toReceiveCurrenciesMap = new Map<string, string[]>(itemsToReceive.currenciesMap);
+
+        const hasKeysOnOurSide = toGiveCurrenciesMap.has('Mann Co. Supply Crate Key');
+        const hasKeysOnTheirSide = toReceiveCurrenciesMap.has('Mann Co. Supply Crate Key');
+
+        const hasItemsOnOurSide = itemsToGive.itemsArray.length > 0;
+        const hasItemsOnTheirSide = itemsToReceive.itemsArray.length > 0;
+
+        // Check if keys and items are on the same side (either our side or their side)
+        const hasKeysAndItemsOnOurSide = hasKeysOnOurSide && hasItemsOnOurSide;
+        const hasKeysAndItemsOnTheirSide = hasKeysOnTheirSide && hasItemsOnTheirSide;
+
+        return hasKeysAndItemsOnOurSide || hasKeysAndItemsOnTheirSide;
     }
 
     private isOnlyMetal = (itemsToGive: ItemsToGiveOrReceive, itemsToReceive: ItemsToGiveOrReceive, toGiveCurrencies: Map<string, string[]>, toReceiveCurrencies: Map<string, string[]>) => {
@@ -353,6 +441,10 @@ export class Trade {
             if (acceptOffer) {
                 // Accept offer.
                 console.log("Accepting offer.");
+                // Store received items (bought items) in temporary cache.
+                if (itemsToReceiveObject.itemsArray.length > 0) {
+                    this.temporalPriceStorage.set(tradeID, itemsToReceiveObject.itemsArray as tradeItem[]);
+                }
                 await this.acceptTrade(tradeID);
             } else {
                 // Decline offer.

@@ -1,4 +1,3 @@
-import { ConsumeMessage } from "amqplib";
 import EventListener from "./BotEvents/EventListener";
 import pool from "./Database/db";
 import { IInventoryManager } from "./Inventory/IInventoryManager";
@@ -9,6 +8,11 @@ import { Pricelist } from "./Pricelist/Pricelist";
 import { SchemaClass } from "./Schema/schema";
 import { Trade } from "./Trading/Trade";
 import { AutoKeys } from "./Inventory/AutoKeys/AutoKeys";
+import { CraftingManager } from "./Crafting/CraftingManager";
+import { ICraftingManager } from "./Crafting/ICraftingManager";
+import { AutoPricerHandler } from "./AutoPricer/AutoPricerHandler";
+import { IPartialPricing } from "./Pricelist/IPartialPricing";
+import { PartialPricing } from "./Pricelist/PartialPricing";
 
 const init = async () => {
     const db = pool;
@@ -21,21 +25,30 @@ const init = async () => {
 
     const pricelist: IPricelist = new Pricelist(db);
 
-    const inventory: IInventoryManager = new InventoryManager(db, schemaManager, schema, pricelist);
+    const inventory: IInventoryManager = new InventoryManager(schemaManager, schema);
 
-    const listingManager = new ListingAPI(schema, schemaManager, pricelist, inventory);
+    const partialPricing: IPartialPricing = new PartialPricing(db);
+
+    await partialPricing.waitForReady();
+
+    const listingManager = new ListingAPI(schema, schemaManager, pricelist, inventory, partialPricing);
 
     await listingManager.waitForReady();
 
     const autokeys = new AutoKeys(inventory, pricelist, listingManager);
 
-    const tradeManager = new Trade(inventory, pricelist, autokeys);
+    await autokeys.checkAutoKeys();
 
-    const eventListener = new EventListener(tradeManager, inventory, listingManager, autokeys);
+    // @ts-ignore: Unused variable
+    const autopricerHandler: AutoPricerHandler = new AutoPricerHandler(listingManager, autokeys);
+
+    const craftingManager: ICraftingManager = new CraftingManager(inventory);
+
+    const tradeManager = new Trade(inventory, pricelist, autokeys, partialPricing);
+
+    const eventListener = new EventListener(tradeManager, listingManager, autokeys, craftingManager);
 
     await eventListener.waitForReady();
-
-    // Start listening for events. Will likely also put relevant event handlers within the classes themselves so that it's organised.
 };
 
 init().catch(error => {

@@ -15,6 +15,10 @@ export class OfferQueueManager {
 
     async enqueueOffer(offer: TradeOffer) {
         if (!this.processedOffers.has(offer.tradeID)) {
+            // Mark involved items as in-use.
+            const assetIDs = offer.itemsToGive.map(item => item.assetid);
+            this.inventoryManager.addInUseAssetIDs(assetIDs);
+
             this.queue.push(offer);
             this.processedOffers.add(offer.tradeID);
             this.processQueue();
@@ -29,12 +33,20 @@ export class OfferQueueManager {
         while (this.queue.length > 0) {
             const offer = this.queue.shift();
             if (offer) {
+                let id = null;
+
+                if (offer.tradeID) {
+                    id = offer.tradeID;
+                } else {
+                    id = offer.id;
+                }
+
                 const assetIDs = offer.itemsToGive.map(item => item.assetid);
-                this.inventoryManager.addInUseAssetIDs(assetIDs);
 
                 try {
+                    this.initializeTradeCompletionPromise(id);
                     await this.handleReceivedTrade(offer);
-                    await this.waitForTradeCompletion(offer.tradeID);
+                    await this.waitForTradeCompletion(id);
                 } catch (err) {
                     console.error('Error processing offer:', err);
                 } finally {
@@ -44,6 +56,13 @@ export class OfferQueueManager {
         }
 
         this.isProcessing = false;
+    }
+
+    private initializeTradeCompletionPromise(tradeID: string): void {
+        this.tradeCompletionPromises[tradeID] = {
+            resolve: () => {},
+            reject: () => {},
+        };
     }
 
     private waitForTradeCompletion(tradeID: string): Promise<void> {

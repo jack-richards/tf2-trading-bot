@@ -15,27 +15,27 @@ import { ConfirmChannel, ConsumeMessage } from 'amqplib';
 import { BOT_EXCHANGE_NAME } from '@tf2-automatic/bot-data';
 import { BOT_MANAGER_EXCHANGE_NAME } from '@tf2-automatic/bot-manager-data';
 import { Trade } from '../Trading/Trade';
-import { IInventoryManager } from '../Inventory/IInventoryManager';
 import { ListingAPI } from '../Listings/ListingAPI';
 import { AutoKeys } from '../Inventory/AutoKeys/AutoKeys';
+import { ICraftingManager } from '../Crafting/ICraftingManager';
 
 class EventListener {
     private connection: AmqpConnectionManager;
     private tradeManager: Trade;
-    private inventoryManager: IInventoryManager;
     private listingManager: ListingAPI;
     private autoKeys: AutoKeys;
+    private craftingManager: ICraftingManager;
     private readyPromise: Promise<void>;
 
     public channelWrapper: ChannelWrapper;
 
-    constructor(tradeManager: Trade, inventoryManager: IInventoryManager, listingManager: ListingAPI, autoKeys: AutoKeys) {
+    constructor(tradeManager: Trade, listingManager: ListingAPI, autoKeys: AutoKeys, craftingManager: ICraftingManager) {
         this.connection = amqp.connect(['amqp://test:test@localhost:5672']);
 
         this.tradeManager = tradeManager;
-        this.inventoryManager = inventoryManager;
         this.listingManager = listingManager;
         this.autoKeys = autoKeys;
+        this.craftingManager = craftingManager
 
         this.connection.on('connect', () => {
             console.log('Connected!');
@@ -103,13 +103,12 @@ class EventListener {
 
     private handleExchangeDetails = async (msg: ConsumeMessage | null) => {
         try {
-            await this.listingManager.handleExchange(msg);
-            // 1. TODO. Check if autokeys is needed. I.e., create listings. I believe that it would be best
-            // to call the listing creation logic of the listing manager within the autokeys class since we
-            // would have just updated the infromation and have easy access to it.
-            await this.autoKeys.checkAutoKeys();
-            // 2. Check inventory to see if crafting is needed.
+            const message = JSON.parse(msg.content.toString());
+            const offer = message.data.offer;
 
+            await this.listingManager.handleExchange(msg);
+            // Check autokeys to see if we need to buy or sell keys.
+            await this.autoKeys.checkAutoKeys();
             // Acknowledge the message if it was handled.
             this.channelWrapper.ack(msg);
         } catch (e) {
@@ -120,6 +119,13 @@ class EventListener {
 
     private handleTradeEvents = async (msg: ConsumeMessage | null) => {
         try {
+            const routingKey = msg.fields.routingKey;
+            if (routingKey === 'trades.changed') {
+                // Smelt metal. This could in theory cause a unprocessed trade to become invalid due to the items involved being used, we do try to avoid this though.
+                // Nevertheless, it is better in the long-term for the bot to comfortably craft it's minimum amounts of currency.
+                // By running this prior to the Trade class method it means that we're crafting before the next trade offer in its queue can be processed.
+                await this.craftingManager.craft();
+            }
             this.tradeManager.handleTradeEvents(msg);
             this.channelWrapper.ack(msg);
         } catch (e) {

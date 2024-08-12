@@ -7,23 +7,21 @@ import { Inventory } from '@tf2-automatic/bot-data';
 import { tradeItem } from '../Trading/types/tradeItem';
 import { SchemaClass } from '../Schema/schema';
 import { Schema } from '@tf2autobot/tf2-schema';
-import { IPricelist } from '../Pricelist/IPricelist';
 import { inventoryItem } from './types/inventoryItem';
 
 import config from '../../config/bot.json';
+import { ParsedEconItem } from 'tf2-item-format/.';
 
 export class InventoryManager implements IInventoryManager {
-    private db: Pool;
     private schemaManager: SchemaClass;
     private schema: Schema;
-    private pricelist: IPricelist;
     private inUseAssetIDs: Set<string>;
+    private inventory: Inventory;
 
-    constructor(db: Pool, schemaManager: SchemaClass, schema: Schema, pricelist: IPricelist) {
-        this.db = db;
+    constructor(schemaManager: SchemaClass, schema: Schema) {
         this.schemaManager = schemaManager;
         this.schema = schema;
-        this.pricelist = pricelist;
+        this.inUseAssetIDs = new Set();
     }
 
     public addInUseAssetIDs(assetIDs: string[]): void {
@@ -39,10 +37,7 @@ export class InventoryManager implements IInventoryManager {
     }
 
     public assetIDInUse = (assetID: string) => {
-        if (this.inUseAssetIDs.has(assetID)) {
-            return true;
-        }
-        return false;
+        return this.inUseAssetIDs.has(assetID);
     }
 
     public removeAssetIDsFromUse = (assetIDs: string[]) => {
@@ -56,10 +51,15 @@ export class InventoryManager implements IInventoryManager {
             this.inUseAssetIDs.delete(assetID);
         }
     }
+    
+    public getAssetIDsInUse(): Set<string> {
+        return this.inUseAssetIDs;    
+    }
 
     async getBotInventory(): Promise<Inventory> {
         try {
-            const response = await axios.get<Inventory>(`http://localhost:3000/inventories/${config.steamid}/440/2?tradableOnly=true`)
+            const response = await axios.get<Inventory>(`http://localhost:3000/inventories/${config.steamid}/440/2?tradableOnly=true`);
+            this.inventory = response.data;
             return response.data;
         } catch (err) {
             console.error(err);
@@ -133,5 +133,31 @@ export class InventoryManager implements IInventoryManager {
         }
 
         return { currenciesMap: Array.from(currenciesMap.entries()), itemsArray };
+    }
+
+    public getAvailableKeys = async (inventory?: Inventory) => {
+        try {
+            // If we have passed a inventory search that instead, else request it.
+            if (!inventory) {
+                const response = await axios.get<Inventory>(`http://localhost:3000/inventories/${config.steamid}/440/2?tradableOnly=true`);
+                inventory = response.data;
+            }
+
+            const inventoryItemObjects: ParsedEconItem[] = this.schemaManager.convertIEconItems(inventory);
+
+            // Extract the assetids of items where fullName is 'Mann Co. Supply Crate Key' and id isn't in use within an active trade.
+            const keys = inventoryItemObjects
+                .filter(item => item.fullName === 'Mann Co. Supply Crate Key' && !this.inUseAssetIDs.has(item.id))
+                .map(item => item.id);
+
+            if (keys.length > 0) {
+                return keys;
+            } else {
+                throw new Error('No keys found available to create sell listing.');
+            }
+        } catch (e) {
+            console.error(e);
+            throw e;
+        }
     }
 }

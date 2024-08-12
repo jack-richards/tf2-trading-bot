@@ -14,4 +14,6 @@ export interface IInventoryManager {
     assetIDInUse(assetID: string): void
     removeAssetIDFromUse(assetID: string): void
     removeAssetIDsFromUse(assetIDs: string[]): void
+    getAssetIDsInUse(): Set<string>
+    getAvailableKeys(inventory?: Inventory): Promise<string[]>
 }

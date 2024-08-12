@@ -3,6 +3,7 @@ import { steamid, token, host, port } from "../../config/bptf-listings.json";
 
 import { IPricelist } from "../Pricelist/IPricelist";
 import { Schema } from "@tf2autobot/tf2-schema";
+import SKU from "@tf2autobot/tf2-sku";
 import { IInventoryManager } from "../Inventory/IInventoryManager";
 import { Inventory } from "@tf2-automatic/bot-data";
 import type { Item } from "../Pricelist/types/item";
@@ -14,7 +15,8 @@ import { OfferDetails } from "../Trading/types/offerDetails";
 import { SchemaClass } from "../Schema/schema";
 import { ParsedEconItem } from "tf2-item-format/.";
 import { tradeItem } from "../Trading/types/tradeItem";
-import Currencies from "@tf2autobot/tf2-currencies";
+import { Mutex } from "async-mutex";
+import { IPartialPricing } from "../Pricelist/IPartialPricing";
 
 export class ListingAPI {
     private schema: Schema;
@@ -22,13 +24,17 @@ export class ListingAPI {
     private pricelist: IPricelist;
     private listingManager: ListingManager;
     private inventory: IInventoryManager;
+    private partialPricing: IPartialPricing;
     private readyPromise: Promise<void>;
 
-    constructor(schema: Schema, schemaManager: SchemaClass, pricelist: IPricelist, inventory: IInventoryManager) {
+    private listingMutex = new Mutex();
+
+    constructor(schema: Schema, schemaManager: SchemaClass, pricelist: IPricelist, inventory: IInventoryManager, partialPricing: IPartialPricing) {
         this.schema = schema;
         this.schemaManager = schemaManager;
         this.pricelist = pricelist;
         this.inventory = inventory;
+        this.partialPricing = partialPricing;
 
         this.listingManager = new ListingManager({
             steamid,
@@ -47,51 +53,182 @@ export class ListingAPI {
                 }
                 console.log('Listing Manager: Ready.');
                 console.log('Listing Manager: Deleting all listings.');
-                await this.listingManager.removeAllListings();
+                await this.listingManager.removeAllListings().catch((e) => {
+                    // If a error occurs reject promise and throw error, we want the application
+                    // to crash so it can restart with pm2 and reattempt initialisation.
+                    reject(e);
+                    throw e;
+                });
                 console.log('Listing Manager: Creating all initial listings.');
-                // TODO. Uncomment when done implementing bulk of bot logic. await this.createInitialListings();
+                await this.createInitialListings();
                 resolve();
             });
         });
     }
 
-    public createKeyListing = async (amount: number, intent: 1 | 0) => {
-        const key = await this.pricelist.getItemPrice('5021;6');
+    public createKeyListing = async (amount: number, intent: 1 | 0, assetID?: string) => {
         let keyListing: CreateListing;
 
-        if (intent === 1) {
-            keyListing = { sku: '5021;6', details: this.generateDetails(key, 'sell'), currencies: key.sell, intent: 1 };
+        const key = await this.pricelist.getItemPrice('5021;6');
+
+        if (intent === 1 && assetID) {
+            keyListing = { id: assetID, details: this.generateDetails(key, 'sell', amount), currencies: key.sell, intent: 1 };
         } else {
-            // TODO. Change to buy object instead of custom 0.11 scrap.
-            keyListing = { sku: '5021;6', details: this.generateDetails(key, 'buy'), currencies: new Currencies({ keys: 0, metal: 0.11 }), intent: 0 };
+            keyListing = { sku: '5021;6', details: this.generateDetails(key, 'buy', amount), currencies: key.buy, intent: 0 };
         }
 
-        this.createListing(keyListing);
+        await this.createListing(keyListing);
     }
 
-    public deleteKeyListings = () => {
-        const intentArray = [0, 1];
-        
-        for (var i = 0; i < intentArray.length; i++) {
-            const intent = intentArray[i];
-            this.removeListing({ sku: '5021;6', intent: intent[i] })
+    public deleteKeyListings = async (keyAssetID?: string) => {
+        if (keyAssetID) {
+            await this.removeListing({ id: keyAssetID, intent: 1 })
         }
+        await this.removeListing({ sku: '5021;6', intent: 0 });
     }
 
     // Export functions for other modules to use
-    public createListing = (listing: CreateListing) => {
-        if (!this.listingManager || !this.listingManager.ready) {
-            throw new Error('Listing Manager is not ready');
+    public createListing = async (listing: CreateListing) => {
+        const release = await this.listingMutex.acquire();
+        try {
+            if (!this.listingManager || !this.listingManager.ready) {
+                throw new Error('Listing Manager is not ready');
+            }
+            this.listingManager.createListing(listing);
+        } catch (e) { 
+            console.error(e);
+            throw e;
+        } finally {
+            release();
         }
-        this.listingManager.createListing(listing);
     };
 
-    public removeListing = (listing: RemoveListing) => {
-        if (!this.listingManager || !this.listingManager.ready) {
-            throw new Error('Listing Manager is not ready');
+    public removeListing = async (listing: RemoveListing) => {
+        const release = await this.listingMutex.acquire();
+        try {
+            if (!this.listingManager || !this.listingManager.ready) {
+                throw new Error('Listing Manager is not ready');
+            }
+            this.listingManager.removeListing(listing);
+        } catch (e) { 
+            console.error(e);
+            throw e;
+        } finally {
+            release();
         }
-        this.listingManager.removeListing(listing);
     };
+
+    public createListings = async (listings: CreateListing[]) => {
+        const release = await this.listingMutex.acquire();
+        try {
+            if (!this.listingManager || !this.listingManager.ready) {
+                throw new Error('Listing Manager is not ready');
+            }
+            this.listingManager.createListings(listings);
+        } catch (e) { 
+            console.error(e);
+            throw e;
+        } finally {
+            release();
+        }
+    }
+
+    public removeListings = async (listings: RemoveListing[]) => {
+        const release = await this.listingMutex.acquire();
+        try {
+            if (!this.listingManager || !this.listingManager.ready) {
+                throw new Error('Listing Manager is not ready');
+            }
+            this.listingManager.removeListings(listings);
+        } catch (e) { 
+            console.error(e);
+            throw e;
+        } finally {
+            release();
+        }
+    }
+
+    public updateKeyListing = async (isSelling: boolean, isBuying: boolean, sellAmount?: number, buyAmount?: number, assetid?: string) => {
+        const release = await this.listingMutex.acquire();
+        try {
+            const keyPrice: Item = await this.pricelist.getItemPrice('5021;6');
+
+            if (assetid && isSelling && sellAmount) {
+                // Update sell listing.
+                this.createListing({ id: assetid, intent: 1, currencies: keyPrice.sell, details: this.generateDetails(keyPrice, 'sell', sellAmount) });
+            }
+            
+            if (isBuying && buyAmount) {
+                this.createListing({ sku: '5021;6', intent: 0, currencies: keyPrice.buy, details: this.generateDetails(keyPrice, 'buy', buyAmount) });
+            }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            release();
+        }
+    }
+
+    public updateExistingListings = async () => {
+        const release = await this.listingMutex.acquire();
+        try {
+            const keyRate = (await this.pricelist.getKeyPrice()).sell.metal;
+            const inventory = await this.inventory.getBotInventory();
+            // Get current desired listings.
+            const desiredListings = await this.listingManager.manager.getDesiredListings();
+            const updatedListings: CreateListing[] = []; 
+
+            for (const desiredListing of desiredListings) {
+                const listing = desiredListing.listing;
+
+                if (listing.intent === 0) {
+                    // Will take the item object from bptf listing and convert it into a standard SKU object that we can draw a valid SKU from.
+                    const sku = SKU.fromObject(this.schemaManager.getItem(listing) as any);
+
+                    // Skip keys, we will update those listings elsewhere.
+                    if (sku === '5021;6') {
+                        continue;
+                    }
+
+                    const pricedItem = await this.pricelist.getItemPrice(sku);
+
+                    listing.currencies = pricedItem.buy;
+                } else if (listing.intent === 1) {
+                    // No item object is provided if intent is to sell, need to find item within inventory and draw data from that.
+                    const item = inventory.find((item => item.assetid === listing.id));
+
+                    if (item) {
+                        const fullName = this.schemaManager.convertIEconItem(item).fullName;
+                        const sku = this.schema.getSkuFromName(fullName);
+
+                        if (sku === '5021;6') {
+                            continue;
+                        }
+
+                        const pricedItem: Item = await this.pricelist.getItemPrice(sku);
+                        const tradeItem: tradeItem = { ...pricedItem, assetid: listing.id };
+
+                        // Check for partial pricing.
+                        const adjustedItems: tradeItem[] = await this.partialPricing.applyPartialPricingAdjustments([tradeItem], keyRate);
+
+                        // Ensure that item is returned with adjusted (or not) prices.
+                        if (adjustedItems.length > 0) {
+                            listing.currencies = adjustedItems[0].sell;
+                        } else {
+                            throw new Error("Listing Manager: Could not create listing, unable to adjust price accounting for partial pricing.")
+                        }
+                    } else {
+                        throw new Error("Listing Manager: Could not create sell listing, unable to find within inventory via assetid.");
+                    }
+                }
+                updatedListings.push(listing);
+            }
+            this.listingManager.createListings(updatedListings);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            release();
+        }
+    }
 
     public handleExchange = async (msg: ConsumeMessage | null) => {
         if (!msg) {
@@ -111,7 +248,6 @@ export class ListingAPI {
                     }
                     break;
                 default:
-                    console.log("yo unrecognised");
                     throw new Error('Unrecognised event.');
             }
         } catch (err) {
@@ -124,9 +260,9 @@ export class ListingAPI {
         const mappedItemsToBuy = this.inventory.mapItemsToObjects(details.sentItems);
         
         try {
-            // Attempt to get prices for item(s) we sold, will be used to create new sell listing(s).
+            // Attempt to get prices for item(s) we bought, will be used to create new sell listing(s).
             const receivedItemPrices = await this.pricelist.checkItemPrices(mappedItemsToSell.itemsArray);
-            // Attempt to get prices for item(s) we bought, will be used to create new buy listing(s).
+            // Attempt to get prices for item(s) we sold, will be used to create new buy listing(s).
             const sentItemPrices = await this.pricelist.checkItemPrices(mappedItemsToBuy.itemsArray);
 
             if (!receivedItemPrices.allPriced || !sentItemPrices.allPriced) {
@@ -139,15 +275,13 @@ export class ListingAPI {
             const deleteSellListings: RemoveListing[] = [];
             const deleteBuyListings: RemoveListing[] = [];
 
-            // TODO. Check for key trade scenario. Probably best todo this from the AutoKeys class.
-
             // Use a set to ensure unique SKUs for buy listings
             const sentItemSet = new Set<string>();
 
             // Handle received items: create sell listings and delete buy listings
             for (const item of receivedItemPrices.items) {
                 // Create new sell listing for each received item.
-                createSellListings.push(this.convertItemToListing(item, item.assetid));
+                createSellListings.push(await this.convertItemToListing(item, item.assetid));
                 // Need to delete any existing buy listing for the item.
                 deleteBuyListings.push({ sku: item.sku, intent: 0 });
             }
@@ -157,16 +291,16 @@ export class ListingAPI {
                 if (!sentItemSet.has(item.sku)) {
                     sentItemSet.add(item.sku);
                     // Create a single buy listing for the item.
-                    createBuyListings.push(this.convertItemToListing(item));
+                    createBuyListings.push(await this.convertItemToListing(item));
                 }
                 // Need to delete any existing sell listing for the item traded.
                 deleteSellListings.push({ id: item.assetid, sku: item.sku, intent: 1 });
             }
 
             // Remove old listings
-            this.listingManager.removeListings(deleteSellListings.concat(deleteBuyListings));
+            await this.removeListings(deleteSellListings.concat(deleteBuyListings));
             // Create new listings
-            this.listingManager.createListings(createSellListings.concat(createBuyListings));
+            await this.createListings(createSellListings.concat(createBuyListings));
         } catch (e) {
             console.error(e);
             return;
@@ -178,19 +312,19 @@ export class ListingAPI {
             const pricelistItems: Item[] = await this.pricelist.getAllItems();
             const inventory: Inventory = await this.inventory.getBotInventory();
 
-            const { sellList, buyList } = this.findSellAndBuyItems(pricelistItems, inventory);
+            const { sellList, buyList } = await this.findSellAndBuyItems(pricelistItems, inventory);
 
             const listings = sellList.concat(buyList);
 
             console.log("Creating listings...");
 
-            this.listingManager.createListings(listings);
+            await this.createListings(listings);
         } catch (e) {
             console.error(e);
         }
     }
 
-    private findSellAndBuyItems(pricelistItems: Item[], inventory: Inventory): { sellList: CreateListing[], buyList: CreateListing[] } {
+    private findSellAndBuyItems = async (pricelistItems: Item[], inventory: Inventory): Promise<{ sellList: CreateListing[]; buyList: CreateListing[]; }> => {
         const sellList: CreateListing[] = [];
         const buyList: CreateListing[] = [];
     
@@ -203,12 +337,12 @@ export class ListingAPI {
                 while (assetids && assetids.length) {
                     const assetid = assetids.shift(); // Remove and get the first assetid
                     if (assetid) {
-                        const listing = this.convertItemToListing(pricelistItem, assetid);
+                        const listing = await this.convertItemToListing(pricelistItem, assetid);
                         sellList.push(listing);
                     }
                 }
             } else {
-                const listing = this.convertItemToListing(pricelistItem);
+                const listing = await this.convertItemToListing(pricelistItem);
                 buyList.push(listing);
             }
         }
@@ -239,20 +373,33 @@ export class ListingAPI {
         return inventoryMap;
     }
 
-    private convertItemToListing = (item: Item | tradeItem, assetid?: string): CreateListing => {
+    private convertItemToListing = async (item: Item | tradeItem, assetid?: string): Promise<CreateListing> => {
         const listing: Partial<CreateListing> = {};
+        const keyRate = (await this.pricelist.getKeyPrice()).sell.metal;
     
         if (assetid) {
+            const tradeItem: tradeItem = { ...item, assetid: assetid } 
             // Intent of 1 = sell.
             listing.intent = 1;
             // Id = assetid.
             listing.id = assetid;
+            // Partial pricing.
+            const adjustedItem: tradeItem[] = await this.partialPricing.applyPartialPricingAdjustments([tradeItem], keyRate);
+
+            if (adjustedItem.length > 0) {
+                item.sell.keys = adjustedItem[0].sell.keys;
+                item.sell.metal = adjustedItem[0].sell.metal;
+                // Set currencies object.
+                listing.currencies = new TF2Currencies({
+                    keys: item.sell.keys,
+                    metal: item.sell.metal 
+                });
+            } else {
+                throw new Error('Listing Manager: Could not create listing, unable to adjust price accounting for partial pricing.');
+            }
+
             // Set details using the generateDetails method.
             listing.details = this.generateDetails(item, 'sell');
-            // Set currencies object.
-            const keys = item.sell.keys;
-            const metal = item.sell.metal;
-            listing.currencies = new TF2Currencies({ keys, metal });
         } else {
             // Intent of 0 = buy.
             listing.intent = 0;
@@ -267,7 +414,7 @@ export class ListingAPI {
         return listing as CreateListing;
     }
 
-    private generateDetails = (item: Item | tradeItem, buyOrSell: 'buy' | 'sell') => {
+    private generateDetails = (item: Item | tradeItem, buyOrSell: 'buy' | 'sell', amount?: number) => {
         let details: string;
         let price: string;
     
@@ -289,7 +436,8 @@ export class ListingAPI {
     
         return details
             .replace('%item%', item.name)
-            .replace('%price%', price);
+            .replace('%price%', price)
+            .replace('%amount%', amount !== undefined ? amount.toString() : '');
     }
 
     public waitForReady(): Promise<void> {
