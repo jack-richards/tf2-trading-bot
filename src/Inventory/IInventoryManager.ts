@@ -5,7 +5,8 @@ import { MappedItems } from "./types/mappedItems"
 
 export interface IInventoryManager {
     // isAtStockLimit(sku: string): Promise<Boolean>
-    getBotInventory(): Promise<Inventory>
+    getBotInventory(fetch?: boolean): Promise<Inventory>
+    updateBotInventory(): Promise<void>
     getUserInventory(steamid: string): Promise<Inventory>
     checkStock(itemsToReceive: tradeItem[]): Promise<Boolean>
     mapItemsToObjects(itemsToGiveOrReceieve: EconItem[] | Item[]): MappedItems

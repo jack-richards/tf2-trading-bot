@@ -1,5 +1,3 @@
-import { Pool } from 'pg';
-import axios from 'axios';
 import addToMapArray from '../Utils/utilities';
 
 import { IInventoryManager } from "./IInventoryManager";
@@ -12,16 +10,26 @@ import { inventoryItem } from './types/inventoryItem';
 import config from '../../config/bot.json';
 import { ParsedEconItem } from 'tf2-item-format/.';
 
+import axios from "axios";
+import axiosRetry from 'axios-retry';
+
 export class InventoryManager implements IInventoryManager {
     private schemaManager: SchemaClass;
     private schema: Schema;
     private inUseAssetIDs: Set<string>;
     private inventory: Inventory;
+    private retryAxios = axios.create(); 
 
     constructor(schemaManager: SchemaClass, schema: Schema) {
         this.schemaManager = schemaManager;
         this.schema = schema;
         this.inUseAssetIDs = new Set();
+
+        axiosRetry(this.retryAxios, { retries: 5, retryDelay: (retryCount) => {
+            // Start with a 1 second delay then exponentially increase. Next retry is 2 seconds etc.
+            return Math.pow(2, retryCount - 1) * 1000;
+         },
+        });
     }
 
     public addInUseAssetIDs(assetIDs: string[]): void {
@@ -56,20 +64,32 @@ export class InventoryManager implements IInventoryManager {
         return this.inUseAssetIDs;    
     }
 
-    async getBotInventory(): Promise<Inventory> {
+    async getBotInventory(fetch: boolean = false): Promise<Inventory> {
         try {
-            const response = await axios.get<Inventory>(`http://localhost:3000/inventories/${config.steamid}/440/2?tradableOnly=true`);
-            this.inventory = response.data;
-            return response.data;
+            let inventory = this.inventory;
+
+            if (fetch || !inventory) {
+                inventory = (await this.retryAxios.get<Inventory>(`http://127.0.0.1:3000/inventories/${config.steamid}/440/2?tradableOnly=true`)).data;
+            }
+            return inventory;
         } catch (err) {
             console.error(err);
             throw err;
         }
     }
 
+    async updateBotInventory(): Promise<void> {
+        try {
+            this.inventory = (await this.retryAxios.get<Inventory>(`http://127.0.0.1:3000/inventories/${config.steamid}/440/2?tradableOnly=true`)).data;
+        } catch (e) {
+            console.error(e);
+            throw e;
+        }
+    }
+
     async getUserInventory(steamid: string): Promise<Inventory> {
         try {
-            const response = await axios.get<Inventory>(`http://localhost:3000/inventories/${steamid}/440/2?tradableOnly=true`)
+            const response = await this.retryAxios.get<Inventory>(`http://127.0.0.1:3000/inventories/${steamid}/440/2?tradableOnly=true`)
             return response.data;
         } catch (err) {
             console.error(err);
@@ -79,7 +99,7 @@ export class InventoryManager implements IInventoryManager {
     
     async checkStock(itemsToReceive: tradeItem[]): Promise<boolean> {
         try {
-            const response = await axios.get<Inventory>(`http://localhost:3000/inventories/${config.steamid}/440/2?tradableOnly=true`);
+            const response = await this.retryAxios.get<Inventory>(`http://127.0.0.1:3000/inventories/${config.steamid}/440/2?tradableOnly=true`);
     
             const currencies = ['Mann Co. Supply Crate Key', 'Refined Metal', 'Reclaimed Metal', 'Scrap Metal'];
     
@@ -139,7 +159,7 @@ export class InventoryManager implements IInventoryManager {
         try {
             // If we have passed a inventory search that instead, else request it.
             if (!inventory) {
-                const response = await axios.get<Inventory>(`http://localhost:3000/inventories/${config.steamid}/440/2?tradableOnly=true`);
+                const response = await this.retryAxios.get<Inventory>(`http://127.0.0.1:3000/inventories/${config.steamid}/440/2?tradableOnly=true`);
                 inventory = response.data;
             }
 

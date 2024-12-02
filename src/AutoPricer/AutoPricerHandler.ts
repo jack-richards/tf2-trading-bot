@@ -11,15 +11,15 @@ export class AutoPricerHandler {
     constructor (listingManager: ListingAPI, autokeys: AutoKeys) {
         this.listingManager = listingManager;
         this.autokeys = autokeys;
-        this.socket = io('http://localhost:3456');
+        this.socket = io('http://127.0.0.1:3456');
 
         // Event handler for when the connection is established
         this.socket.on('connect', () => {
             console.log('Connected to socket.');
         });
 
-        // Event handler for messages from the server
-        this.socket.on('pricesChanged', async () => {
+        // Event handler for messages from the autopricer server
+        this.socket.on('pricesUpdated', async () => {
             try {
                 await this.listingManager.updateExistingListings();
             } catch (e) {
@@ -29,18 +29,7 @@ export class AutoPricerHandler {
 
         this.socket.on('keyPrice', async () => {
             try {
-                const assetid = this.autokeys.getKeyInUse();
-                const buyAmount = this.autokeys.getKeysToBuy();
-                const sellAmount = this.autokeys.getKeysToSell();
-
-                const isSelling = this.autokeys.getIsSellingKeys();
-                const isBuying = this.autokeys.getIsBuyingKeys();
-
-                if (assetid) {
-                    await this.listingManager.updateKeyListing(isSelling, isBuying, sellAmount, buyAmount, assetid);
-                } else {
-                    await this.listingManager.updateKeyListing(isSelling, isBuying, sellAmount, buyAmount);
-                }
+                await this.autokeys.checkAutoKeys();
             } catch (e) {
                 console.error(e);
             }

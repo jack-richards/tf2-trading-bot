@@ -72,6 +72,44 @@ export class SchemaClass {
         }
     }
 
+    public waitForReady(): Promise<void> {
+        return this.readyPromise;
+    }
+
+/**
+ * The following methods (below this comment) were taken from the project node-bptf-listings.
+ * Original project: https://github.com/Nicklason/node-bptf-listings/tree/master
+ * 
+ * Relevant file(s) where the methods were copied from:
+ *   - https://github.com/Nicklason/node-bptf-listings/blob/master/classes/listing.js#L54
+ *   - https://github.com/Nicklason/node-bptf-listings/blob/master/classes/listing.js#L148
+ * 
+ * To comply with the terms of the MIT License, a copy of the license from the 
+ * node-bptf-listings project is included below:
+ * 
+ *  MIT License
+ *
+ *  Copyright (c) 2019 Nicklas Marc Pedersen
+ *
+ *  Permission is hereby granted, free of charge, to any person obtaining a copy
+ *  of this software and associated documentation files (the "Software"), to deal
+ *  in the Software without restriction, including without limitation the rights
+ *  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *  copies of the Software, and to permit persons to whom the Software is
+ *  furnished to do so, subject to the following conditions:
+ *
+ *  The above copyright notice and this permission notice shall be included in all
+ *  copies or substantial portions of the Software.
+ *
+ *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *  SOFTWARE.
+ */
+
      /**
      * From https://github.com/Nicklason/node-bptf-listings/blob/master/classes/listing.js#L54
      * Returns the item in the listings
@@ -144,9 +182,5 @@ export class SchemaClass {
         }
 
         return attributes;
-    }
-
-    public waitForReady(): Promise<void> {
-        return this.readyPromise;
     }
 }

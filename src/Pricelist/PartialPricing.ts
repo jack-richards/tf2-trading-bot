@@ -59,8 +59,7 @@ export class PartialPricing implements IPartialPricing {
             const assetids = items.map(item => item.assetid);
 
             const query = `
-                SELECT sku, name, buy, sell 
-                FROM tf2.pricelist 
+                DELETE FROM tf2.purchase_history
                 WHERE (sku, assetid) IN (
                     SELECT unnest($1::text[]), unnest($2::text[])
                 );

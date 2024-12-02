@@ -12,102 +12,123 @@ import { OfferQueueManager } from "./OfferQueueManager";
 import { TradeOffer } from "@tf2-automatic/bot-data";
 import { IPartialPricing } from "../Pricelist/IPartialPricing";
 import { tradeItem } from "./types/tradeItem";
+import Bans from "../Ban/Bans";
 
 export class Trade {
     private inventory: IInventoryManager;
     private pricelist: IPricelist;
     private autokeys: AutoKeys
     private partialPricing: IPartialPricing;
+    private bans: Bans;
     private offerQueueManager: OfferQueueManager;
     private temporalPriceStorage: Map<string, tradeItem[]> = new Map();
 
-    constructor(inventory: IInventoryManager, pricelist: IPricelist, autokeys: AutoKeys, partialPricing: IPartialPricing) {
+    constructor(inventory: IInventoryManager, pricelist: IPricelist, autokeys: AutoKeys, partialPricing: IPartialPricing, bans: Bans) {
         this.inventory = inventory;
         this.pricelist = pricelist;
         this.autokeys = autokeys;
+        this.partialPricing = partialPricing;
+        this.bans = bans;
 
-        this.offerQueueManager = new OfferQueueManager(this.handleRecievedTrade, this.inventory);
+        this.offerQueueManager = new OfferQueueManager(this.handleRecievedTrade);
     }
 
     public handleTradeEvents = async (data: ConsumeMessage | null) => {
         if (!data) {
             return;
         }
-
+    
+        const message = JSON.parse(data.content.toString());
+        const routingKey = data.fields.routingKey;
+        // Upon an unrecoverable error, the event will contain the offer ID within the raw object.
+        // Else it should be contained within offer.
+        let offerID = message.data.offer?.id || message.data.offer?.tradeID || message?.data?.job?.raw?.id;
+    
         try {
-            const message = JSON.parse(data.content.toString());
-            const routingKey = data.fields.routingKey;
-
             switch (routingKey) {
                 case 'trades.received':
-                    // await this.handleRecievedTrade(message.data.offer);
-                    await this.offerQueueManager.enqueueOffer(message.data.offer);
+                    this.offerQueueManager.enqueueOffer(message.data.offer);
                     break;
                 case 'trades.sent':
                     console.log(message);
                     break;
                 case 'trades.confirmation_needed':
-                    const id = message.data.offer.id;
-                    await this.confirmOffer(id);
+                    // Will throw an error if unsuccessful.
+                    await this.confirmOffer(offerID);
                     break;
                 case 'trades.changed':
-                    const offer: TradeOffer = message.data.offer;
-                    const offerState: TradeOffer['state'] = offer.state;
-
-                    /*
-                    offerState === 1 || // Invalid.
-                    offerState === 3 || // Accepted.
-                    offerState === 5 || // Expired.
-                    offerState === 6 || // Canceled.
-                    offerState === 7 || // Declined.
-                    offerState === 8 || // Invalid items.
-                    offerState === 10 // Cancelled by two-factor. 
-                    */
-
-                    if (offerState &&
-                        offerState === 3) {
-                        // Map contains priced items, currencies are already filtered out.
-                        const itemsReceived: tradeItem[] = this.temporalPriceStorage.get(offer.id);
-                        if (itemsReceived) {
-                            await this.partialPricing.recordPurchase(itemsReceived);
-                        }
-
-                        const itemsGiven = this.inventory.mapItemsToObjects(offer.itemsToGive);
-                        // Remove any traded away items that were marked as 'purchased' in our records.
-                        // Need to consider a scenario where for whatever reason a error occurs while attempting to delete
-                        // thus leaving the item in the purchase table, what impacts would this have?
-
-                        // Above point should be solved by us searching purchased_item table using assetid paired with sku.
-                        await this.partialPricing.removePurchase(itemsGiven.itemsArray);
-
-                        // Check if we have given a key used to originally create a autokeys sell listing.
-                        await this.autokeys.validateKeySellListing(offer);
-                    }
-
-                    console.log("Trade complete - code: " + offerState);
-                    this.offerQueueManager.markTradeAsComplete(offer.id);
+                    // Handles trade state changes, such as when a trade is accepted.
+                    await this.processTradeChange(message.data.offer);
                     break;
                 case 'trades.error':
-                    // This event occurs upon a unrecoverable error todo with a trade.
-                    const offerID = message?.data?.job?.raw?.id;
+                    // This event occurs upon an unrecoverable error related to a trade.
                     console.error(message);
-                    if (offerID) {
-                        this.temporalPriceStorage.delete(offerID);
-                        this.offerQueueManager.markTradeAsComplete(offerID);
-                    }
-                    break;
+                    throw new Error('Trade Manager: Critical failure in performing action on trade.');
                 default:
                     console.log(message);
-                    throw new Error('Unrecognised event.');
+                    throw new Error('Trade Manager: Unrecognized event.');
             }
         } catch (err) {
-            console.log('Failed to parse event', err);
+            // If an error occurs, we mark the trade as processed to prevent a deadlock.
+            if (offerID) {
+                this.temporalPriceStorage.delete(offerID);
+                this.offerQueueManager.markTradeAsComplete(offerID);
+            }
+            console.log('Failed to process event', err);
+        }
+    }
+
+    /**
+     * Handles trade state changes and processes trade completion.
+     * Only marks the trade as complete after all necessary actions are performed successfully.
+    */
+    private async processTradeChange(offer: TradeOffer): Promise<void> {
+        const offerID = offer.id || offer.tradeID;
+        const offerState: TradeOffer['state'] = offer.state;
+
+        try {
+            // Accepted
+            if (offerState === 3) {
+                // Map contains priced items, currencies are already filtered out.
+                const itemsReceived: tradeItem[] = this.temporalPriceStorage.get(offerID);
+
+                if (itemsReceived) {
+                    await this.partialPricing.recordPurchase(itemsReceived);
+                }
+
+                const itemsGiven = this.inventory.mapItemsToObjects(offer.itemsToGive);
+                // Remove any traded away items that were marked as 'purchased' in our records.
+                // Need to consider a scenario where, for whatever reason, an error occurs while attempting to delete,
+                // thus leaving the item in the purchase table, and the potential impacts.
+                // Above point should be solved by searching the purchased_item table using assetid paired with SKU.
+                await this.partialPricing.removePurchase(itemsGiven.itemsArray);
+
+                // Check if we have given a key used to originally create an autokeys sell listing.
+                await this.autokeys.validateKeySellListing(offer);
+
+                // Remove stored offer items from map.
+                this.temporalPriceStorage.delete(offerID);
+
+                console.log("Trade complete - code: " + offerState);
+            }
+
+        // Mark trade as complete after processing.
+        this.offerQueueManager.markTradeAsComplete(offerID);
+
+        } catch (err) {
+            console.error('Error processing trade change:', err);
+            throw err;
         }
     }
 
     private confirmOffer = async (id: string) => {
-        await axios.post(`http://localhost:3000/trades/${id}/confirm`);
-        console.log("Confirmed offer: " + id);
+        try {
+            await axios.post(`http://127.0.0.1:3000/trades/${id}/confirm`);
+            console.log("Confirmed offer: " + id);
+        } catch (e) {
+            console.error(e);
+            throw e;
+        }
     }
 
     private async calculateValue(itemsToGiveOrReceive: ItemsToGiveOrReceive, toGive: Boolean, keyRate: number) {    
@@ -321,21 +342,31 @@ export class Trade {
         const theirValue = this.calculateCurrencyValue(toReceiveCurrencies, false, keyPrice);
         const ourValue = this.calculateCurrencyValue(toGiveCurrencies, true, keyPrice);
 
-        return theirValue <= ourValue;
+        if (theirValue < ourValue) {
+            return false;
+        } else {
+            return true;
+        }
     }
 
-    private calculateCurrencyValue(currenciesMap: Map<string, string[]>, toGive: boolean, keyPrice: KeyPrice) {        
-        const keys = currenciesMap.get('Mann Co. Supply Crate Key')?.length || 0;
-        const keyValue = toGive ? keyPrice.sell.metal * keys : keyPrice.buy.metal * keys;
-    
-        const refinedValue = currenciesMap.get('Refined Metal')?.length || 0;
-        const reclaimedValue = (currenciesMap.get('Reclaimed Metal')?.length || 0) * 0.33;
-        const scrapValue = (currenciesMap.get('Scrap Metal')?.length || 0) * 0.11;
+    private calculateCurrencyValue(currenciesMap: Map<string, string[]>, toGive: boolean, keyPrice: KeyPrice) {   
+        const keyRate = toGive ? keyPrice.sell.metal : keyPrice.buy.metal;
+
+        let value = 0;
+
+        const keys = (currenciesMap.get('Mann Co. Supply Crate Key')?.length || 0);
+        const keysValueInScrap = new Currencies({ metal: (keyRate * keys) }).toValue();
+
+        const refinedValue = (currenciesMap.get('Refined Metal')?.length || 0);
+        const reclaimedValue = (currenciesMap.get('Reclaimed Metal')?.length || 0);
+        const scrapValue = (currenciesMap.get('Scrap Metal')?.length || 0);
+
+        value += keysValueInScrap;
+        value += 9 * refinedValue;
+        value += 3 * reclaimedValue;
+        value += scrapValue;
         
-        const metal = keyValue + refinedValue + reclaimedValue + scrapValue;
-        const currencies = new TF2Currencies({ metal });
-        
-        return currencies.toValue();
+        return value;
     }
 
     private isKeyTrade(
@@ -359,13 +390,23 @@ export class Trade {
     }
 
     private acceptTrade = async (tradeID: string) => {
-        await axios.post(`http://localhost:3000/trades/${tradeID}/accept`);
-        console.log("Accepted trade: " + tradeID);
+        try {
+            await axios.post(`http://127.0.0.1:3000/trades/${tradeID}/accept`);
+            console.log("Accepted trade: " + tradeID);
+        } catch (e) {
+            console.error(e);
+            throw e;
+        }
     }
 
     private declineTrade = async (tradeID: string) => {
-        await axios.delete(`http://localhost:3000/trades/${tradeID}`);
-        console.log("Declined trade: " + tradeID);
+        try {
+            await axios.delete(`http://127.0.0.1:3000/trades/${tradeID}`);
+            console.log("Declined trade: " + tradeID);
+        } catch (e) {
+            console.error(e);
+            throw e;
+        }
     }
 
     private checkEscrow = async (offer?: TradeOffer, steamID?: string, token?: string): Promise<boolean> => {
@@ -379,7 +420,7 @@ export class Trade {
                     return true;
                 }
             } else if (steamID && token) {
-                const response = await axios.get(`http://localhost:3000/escrow/${steamID}/${token}`);
+                const response = await axios.get(`http://127.0.0.1:3000/escrow/${steamID}/${token}`);
                 return response.data.escrowDays > 0;
             } else {
                 throw new Error('Missing parameters needed to check escrow.');
@@ -395,6 +436,18 @@ export class Trade {
         const tradeID = offer.id;
 
         try {
+            const result = await this.bans.isBanned(partner);
+            if (result.isBanned) {
+                console.log(`Trade Manager: Declining trade due to user (${partner}) being banned.`);
+                await this.declineTrade(tradeID);
+                return;
+            }
+        } catch (e) {
+            console.error(e);
+            throw e;
+        }
+
+        try {
             if (await this.checkEscrow(offer)) {
                 console.log("Trade will have escrow, declining...");
                 await this.declineTrade(tradeID);
@@ -403,7 +456,7 @@ export class Trade {
         } catch (e) {
             // Failed to check escrow, leave offer unprocessed.
             console.error(e);
-            return;
+            throw e;
         }
 
         let itemsToGive = offer.itemsToGive as any;
@@ -421,7 +474,7 @@ export class Trade {
             itemsToReceive = await this.pricelist.checkItemPrices(itemsToReceiveObject.itemsArray)
         } catch (e) {
             console.error(e);
-            return;
+            throw e;
         }
 
         if (!itemsToGive.allPriced || !itemsToReceive.allPriced) {
@@ -454,7 +507,7 @@ export class Trade {
         } catch (e) {
             console.error(e);
             console.log("Failed to perform action on trade. It is likely that the trade offer no longer exists.");
-            return;
+            throw e;
         }
     }
 }

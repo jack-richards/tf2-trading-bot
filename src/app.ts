@@ -13,6 +13,11 @@ import { ICraftingManager } from "./Crafting/ICraftingManager";
 import { AutoPricerHandler } from "./AutoPricer/AutoPricerHandler";
 import { IPartialPricing } from "./Pricelist/IPartialPricing";
 import { PartialPricing } from "./Pricelist/PartialPricing";
+import Bans from "./Ban/Bans";
+
+import bptfConfig from "../config/bptf-listings.json";
+import mptfConfig from '../config/mptf.json';
+import botConfig from "../config/bot.json";
 
 const init = async () => {
     const db = pool;
@@ -44,9 +49,11 @@ const init = async () => {
 
     const craftingManager: ICraftingManager = new CraftingManager(inventory);
 
-    const tradeManager = new Trade(inventory, pricelist, autokeys, partialPricing);
+    const bans = new Bans(bptfConfig.apiKey, mptfConfig.apiKey, botConfig.steamid);
 
-    const eventListener = new EventListener(tradeManager, listingManager, autokeys, craftingManager);
+    const tradeManager = new Trade(inventory, pricelist, autokeys, partialPricing, bans);
+
+    const eventListener = new EventListener(tradeManager, listingManager, autokeys, craftingManager, inventory);
 
     await eventListener.waitForReady();
 };

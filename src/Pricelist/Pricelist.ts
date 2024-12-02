@@ -68,24 +68,24 @@ export class Pricelist implements IPricelist {
 
     async checkItemPrices(items: inventoryItem[]): Promise<{ allPriced: boolean; items: tradeItem[] }> {
         const skus = items.map(item => item.sku);
-        const names = items.map(item => item.name);
+        // const names = items.map(item => item.name);
     
         const query = `
             SELECT sku, name, buy, sell 
             FROM tf2.pricelist 
-            WHERE (sku, name) IN (
-                SELECT unnest($1::text[]), unnest($2::text[])
+            WHERE (sku) IN (
+                SELECT unnest($1::text[])
             );
         `;
     
-        const result = await this.db.query(query, [skus, names]);
+        const result = await this.db.query(query, [skus]);
         const pricedItems = result.rows;
     
         const itemsWithPrices: tradeItem[] = [];
         let allPriced = true;
     
         for (const item of items) {
-            const pricedItem = pricedItems.find(pricedItem => pricedItem.sku === item.sku && pricedItem.name === item.name);
+            const pricedItem = pricedItems.find(pricedItem => pricedItem.sku === item.sku);
             if (pricedItem) {
                 const buy = pricedItem.buy;
                 const sell = pricedItem.sell;

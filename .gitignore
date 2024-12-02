@@ -133,3 +133,4 @@ schema.json
 config/bptf-listings.json
 config/database.json
 config/bot.json
+config/mptf.json

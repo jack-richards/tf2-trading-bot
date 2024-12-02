@@ -1,83 +1,52 @@
 import { TradeOffer } from "@tf2-automatic/bot-data";
-import { IInventoryManager } from "../Inventory/IInventoryManager";
 
 export class OfferQueueManager {
     private queue: TradeOffer[] = [];
-    private processedOffers: Set<string> = new Set();
     private isProcessing: boolean = false;
+    private tradeStates: Map<string, 'Pending' | 'Processing' | 'Completed' | 'Error'> = new Map();
 
-    private inventoryManager: IInventoryManager;
-    private tradeCompletionPromises: { [tradeID: string]: { resolve: () => void, reject: () => void } } = {};
+    constructor(private handleReceivedTrade: (offer: TradeOffer) => Promise<void>) {}
 
-    constructor(private handleReceivedTrade: (offer: TradeOffer) => Promise<void>, inventoryManager: IInventoryManager) {
-        this.inventoryManager = inventoryManager;
-    }
-
-    async enqueueOffer(offer: TradeOffer) {
-        if (!this.processedOffers.has(offer.tradeID)) {
-            // Mark involved items as in-use.
-            const assetIDs = offer.itemsToGive.map(item => item.assetid);
-            this.inventoryManager.addInUseAssetIDs(assetIDs);
-
+    public enqueueOffer(offer: TradeOffer) {
+        const id = offer.id || offer.tradeID;
+        if (!this.tradeStates.has(id)) {
             this.queue.push(offer);
-            this.processedOffers.add(offer.tradeID);
+            this.tradeStates.set(id, 'Pending');
             this.processQueue();
         }
     }
 
     private async processQueue() {
-        if (this.isProcessing) return; // Ensure only one process runs at a time
+        if (this.isProcessing || this.queue.length === 0) return;
 
         this.isProcessing = true;
 
-        while (this.queue.length > 0) {
-            const offer = this.queue.shift();
-            if (offer) {
-                let id = null;
+        const offer = this.queue.shift();
+        const id = offer.id || offer.tradeID;
 
-                if (offer.tradeID) {
-                    id = offer.tradeID;
-                } else {
-                    id = offer.id;
-                }
-
-                const assetIDs = offer.itemsToGive.map(item => item.assetid);
-
-                try {
-                    this.initializeTradeCompletionPromise(id);
-                    await this.handleReceivedTrade(offer);
-                    await this.waitForTradeCompletion(id);
-                } catch (err) {
-                    console.error('Error processing offer:', err);
-                } finally {
-                    this.inventoryManager.removeAssetIDsFromUse(assetIDs);
-                }
+        if (offer) {
+            this.tradeStates.set(id, 'Processing');
+            try {
+                await this.handleReceivedTrade(offer);
+            } catch (e) {
+                console.log(e);
+                console.log("Error occurred while processing the trade.");
+                // Remove the trade state on error. Could adjust this to earmark it with
+                // error so the offer could be re-made or re-attempted. 
+                this.tradeStates.delete(id);
+                this.isProcessing = false;
+                // Continue to the next trade after an error.
+                this.processQueue();
             }
+        } else {
+            this.isProcessing = false;
         }
-
-        this.isProcessing = false;
-    }
-
-    private initializeTradeCompletionPromise(tradeID: string): void {
-        this.tradeCompletionPromises[tradeID] = {
-            resolve: () => {},
-            reject: () => {},
-        };
-    }
-
-    private waitForTradeCompletion(tradeID: string): Promise<void> {
-        return new Promise((resolve) => {
-            this.tradeCompletionPromises[tradeID] = { resolve, reject: () => {} };
-        });
     }
 
     public markTradeAsComplete(tradeID: string) {
-        const promise = this.tradeCompletionPromises[tradeID];
-        if (promise) {
-            promise.resolve();
-            delete this.tradeCompletionPromises[tradeID];
-        }
+        this.tradeStates.set(tradeID, 'Completed');
+        console.log("Marked as complete: " + tradeID);
+        this.isProcessing = false;
+        this.processQueue();
     }
 }
-
-export default OfferQueueManager;

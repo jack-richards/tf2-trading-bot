@@ -12,12 +12,13 @@
 
 import amqp, { AmqpConnectionManager, ChannelWrapper } from 'amqp-connection-manager';
 import { ConfirmChannel, ConsumeMessage } from 'amqplib';
-import { BOT_EXCHANGE_NAME } from '@tf2-automatic/bot-data';
+import { BOT_EXCHANGE_NAME, TradeOffer } from '@tf2-automatic/bot-data';
 import { BOT_MANAGER_EXCHANGE_NAME } from '@tf2-automatic/bot-manager-data';
 import { Trade } from '../Trading/Trade';
 import { ListingAPI } from '../Listings/ListingAPI';
 import { AutoKeys } from '../Inventory/AutoKeys/AutoKeys';
 import { ICraftingManager } from '../Crafting/ICraftingManager';
+import { IInventoryManager } from '../Inventory/IInventoryManager';
 
 class EventListener {
     private connection: AmqpConnectionManager;
@@ -25,17 +26,19 @@ class EventListener {
     private listingManager: ListingAPI;
     private autoKeys: AutoKeys;
     private craftingManager: ICraftingManager;
+    private inventory: IInventoryManager;
     private readyPromise: Promise<void>;
 
     public channelWrapper: ChannelWrapper;
 
-    constructor(tradeManager: Trade, listingManager: ListingAPI, autoKeys: AutoKeys, craftingManager: ICraftingManager) {
-        this.connection = amqp.connect(['amqp://test:test@localhost:5672']);
+    constructor(tradeManager: Trade, listingManager: ListingAPI, autoKeys: AutoKeys, craftingManager: ICraftingManager, inventory: IInventoryManager) {
+        this.connection = amqp.connect(['amqp://test:test@127.0.0.1:5672']);
 
         this.tradeManager = tradeManager;
         this.listingManager = listingManager;
         this.autoKeys = autoKeys;
         this.craftingManager = craftingManager
+        this.inventory = inventory;
 
         this.connection.on('connect', () => {
             console.log('Connected!');
@@ -120,13 +123,26 @@ class EventListener {
     private handleTradeEvents = async (msg: ConsumeMessage | null) => {
         try {
             const routingKey = msg.fields.routingKey;
+            const message = JSON.parse(msg.content.toString());
+
             if (routingKey === 'trades.changed') {
-                // Smelt metal. This could in theory cause a unprocessed trade to become invalid due to the items involved being used, we do try to avoid this though.
-                // Nevertheless, it is better in the long-term for the bot to comfortably craft it's minimum amounts of currency.
-                // By running this prior to the Trade class method it means that we're crafting before the next trade offer in its queue can be processed.
-                await this.craftingManager.craft();
+                const offer: TradeOffer = message.data.offer;
+                const offerState: TradeOffer['state'] = offer.state;
+
+                // offerState === 3 // Accepted.
+                // An accepted offer means an exchange of items.
+                if (offerState &&
+                    offerState === 3) {
+                    // Update our local inventory cache.
+                    await this.inventory.updateBotInventory();
+                    // Smelt metal. This could in theory cause a unprocessed trade to become invalid due to the items involved being used, we do try to avoid this though.
+                    // Nevertheless, it is better in the long-term for the bot to comfortably craft it's minimum amounts of currency.
+                    // By running this prior to the Trade class method it means that we're crafting before the next trade offer in its queue can be processed.
+                    await this.craftingManager.craft();
+                }
             }
-            this.tradeManager.handleTradeEvents(msg);
+            
+            await this.tradeManager.handleTradeEvents(msg);
             this.channelWrapper.ack(msg);
         } catch (e) {
             this.channelWrapper.nack(msg, false, false);

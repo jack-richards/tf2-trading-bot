@@ -25,17 +25,17 @@ export class CraftingManager implements ICraftingManager {
     }
 
     public craft = async () => {
-        const inventory = await this.inventoryManager.getBotInventory();
-        const mappedInventory = this.inventoryManager.mapItemsToObjects(inventory as any as EconItem[]);
-
-        // Convert currenciesMap array to a Map.
-        const currenciesMap = new Map<string, string[]>(mappedInventory.currenciesMap);
-
-        const recipes = this.determineCraftingRecipes(currenciesMap);
-
         try {
+            const inventory = await this.inventoryManager.getBotInventory();
+            const mappedInventory = this.inventoryManager.mapItemsToObjects(inventory as any as EconItem[]);
+
+            // Convert currenciesMap array to a Map.
+            const currenciesMap = new Map<string, string[]>(mappedInventory.currenciesMap);
+
+            const recipes = this.determineCraftingRecipes(currenciesMap);
+
             for (const recipe of recipes) {
-                await axios.post('http://localhost:3000/tf2/craft', recipe);
+                await axios.post('http://127.0.0.1:3000/tf2/craft', recipe);
             }
         } catch (e) {
             console.error(e);

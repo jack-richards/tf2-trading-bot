@@ -7,7 +7,6 @@ import SKU from "@tf2autobot/tf2-sku";
 import { IInventoryManager } from "../Inventory/IInventoryManager";
 import { Inventory } from "@tf2-automatic/bot-data";
 import type { Item } from "../Pricelist/types/item";
-import TF2Currencies from '@tf2autobot/tf2-currencies';
 
 import listingConfig from '../../config/bptf-listings.json'
 import { ConsumeMessage } from "amqplib";
@@ -17,6 +16,7 @@ import { ParsedEconItem } from "tf2-item-format/.";
 import { tradeItem } from "../Trading/types/tradeItem";
 import { Mutex } from "async-mutex";
 import { IPartialPricing } from "../Pricelist/IPartialPricing";
+import Currencies from "@tf2autobot/tf2-currencies";
 
 export class ListingAPI {
     private schema: Schema;
@@ -53,7 +53,7 @@ export class ListingAPI {
                 }
                 console.log('Listing Manager: Ready.');
                 console.log('Listing Manager: Deleting all listings.');
-                await this.listingManager.removeAllListings().catch((e) => {
+                await this.removeAllListings().catch((e) => {
                     // If a error occurs reject promise and throw error, we want the application
                     // to crash so it can restart with pm2 and reattempt initialisation.
                     reject(e);
@@ -148,17 +148,32 @@ export class ListingAPI {
         }
     }
 
+    public removeAllListings = async () => {
+        const release = await this.listingMutex.acquire();
+        try {
+            if (!this.listingManager || !this.listingManager.ready) {
+                throw new Error('Listing Manager is not ready');
+            }
+            await this.listingManager.removeAllListings();
+        } catch (e) { 
+            console.error(e);
+            throw e;
+        } finally {
+            release();
+        }
+    }
+
     public updateKeyListing = async (isSelling: boolean, isBuying: boolean, sellAmount?: number, buyAmount?: number, assetid?: string) => {
         const release = await this.listingMutex.acquire();
         try {
             const keyPrice: Item = await this.pricelist.getItemPrice('5021;6');
 
-            if (assetid && isSelling && sellAmount) {
+            if (assetid && isSelling && sellAmount > 0) {
                 // Update sell listing.
                 this.createListing({ id: assetid, intent: 1, currencies: keyPrice.sell, details: this.generateDetails(keyPrice, 'sell', sellAmount) });
             }
             
-            if (isBuying && buyAmount) {
+            if (isBuying && buyAmount > 0) {
                 this.createListing({ sku: '5021;6', intent: 0, currencies: keyPrice.buy, details: this.generateDetails(keyPrice, 'buy', buyAmount) });
             }
         } catch (e) {
@@ -172,7 +187,7 @@ export class ListingAPI {
         const release = await this.listingMutex.acquire();
         try {
             const keyRate = (await this.pricelist.getKeyPrice()).sell.metal;
-            const inventory = await this.inventory.getBotInventory();
+            const inventory = await this.inventory.getBotInventory(true);
             // Get current desired listings.
             const desiredListings = await this.listingManager.manager.getDesiredListings();
             const updatedListings: CreateListing[] = []; 
@@ -217,6 +232,7 @@ export class ListingAPI {
                             throw new Error("Listing Manager: Could not create listing, unable to adjust price accounting for partial pricing.")
                         }
                     } else {
+                        console.log("Could not find item in inventory, listing details: " + JSON.stringify(listing));
                         throw new Error("Listing Manager: Could not create sell listing, unable to find within inventory via assetid.");
                     }
                 }
@@ -252,6 +268,7 @@ export class ListingAPI {
             }
         } catch (err) {
             console.log('Failed to parse event', err);
+            throw err;
         }
     }
 
@@ -310,7 +327,7 @@ export class ListingAPI {
     private createInitialListings = async () => {
         try {
             const pricelistItems: Item[] = await this.pricelist.getAllItems();
-            const inventory: Inventory = await this.inventory.getBotInventory();
+            const inventory: Inventory = await this.inventory.getBotInventory(true);
 
             const { sellList, buyList } = await this.findSellAndBuyItems(pricelistItems, inventory);
 
@@ -390,7 +407,7 @@ export class ListingAPI {
                 item.sell.keys = adjustedItem[0].sell.keys;
                 item.sell.metal = adjustedItem[0].sell.metal;
                 // Set currencies object.
-                listing.currencies = new TF2Currencies({
+                listing.currencies = new Currencies({
                     keys: item.sell.keys,
                     metal: item.sell.metal 
                 });
@@ -408,7 +425,7 @@ export class ListingAPI {
             // Set currencies object.
             const keys = item.buy.keys;
             const metal = item.buy.metal;
-            listing.currencies = new TF2Currencies({ keys, metal });
+            listing.currencies = new Currencies({ keys, metal });
         }
     
         return listing as CreateListing;
@@ -420,17 +437,22 @@ export class ListingAPI {
     
         if (buyOrSell === 'buy') {
             details = listingConfig.buyDetails;
-            if (item.buy.keys === 0) {
-                price = `${item.buy.metal} metal`
+            if (item.buy.keys === 0 || item.buy.keys < 0) {
+                price = `${item.buy.metal} ref`
+            } else if (item.buy.keys > 1) {
+                price = `${item.buy.keys} keys, ${item.buy.metal} ref`;
             } else {
-                price = `${item.buy.keys} keys, ${item.buy.metal} metal`;
+                // 1 key, use 'key' instead of 'keys'.
+                price = `${item.buy.keys} key, ${item.buy.metal} ref`;
             }
         } else {
             details = listingConfig.sellDetails;
-            if (item.sell.keys === 0) {
-                price = `${item.sell.metal} metal`
+            if (item.sell.keys === 0 || item.sell.keys < 0) {
+                price = `${item.sell.metal} ref`
+            } else if (item.sell.keys > 1) {
+                price = `${item.sell.keys} keys, ${item.sell.metal} ref`;
             } else {
-                price = `${item.sell.keys} keys, ${item.sell.metal} metal`;
+                price = `${item.sell.keys} key, ${item.sell.metal} ref`;
             }
         }
     
