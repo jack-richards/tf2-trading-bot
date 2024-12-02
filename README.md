@@ -258,3 +258,6 @@ When you run:
 pm2 list
 ```
 You should see the trading bot as one of the processes, you can shut it down with ``pm2 stop [application name]`` or ``pm2 delete [application name]``
+
+# How to add items to buy & sell?
+Simply add the item to be priced by the bptf-autopricer application through one of the methods shown [here](https://github.com/jack-richards/bptf-autopricer/tree/main?tab=readme-ov-file#adding-items-to-price).
