@@ -227,8 +227,10 @@ Now that the bot is configured, re-run the build command in the top-level of the
 ```bash
 npm run build
 ```
-Launch the bot, bot manager and bptf-autopricer applications.  
-After, change directories within the terminal to ``dist/src/``, here you should find the file app.js, the entry-point to the application.  
+Launch the bot, bot manager and bptf-autopricer applications.
+
+After, change directories within the terminal to ``dist/src/``, here you should find the file app.js, the entry-point to the application.
+  
 To launch the **tf2-trading-bot** run:
 ```bash
 node app.js
