@@ -1,0 +1,101 @@
+version: '3.8'
+volumes:
+  rabbitmq:
+  redis:
+services:
+  rabbitmq:
+    image: rabbitmq:3.13.0-management-alpine
+    # By putting a localhost ip address before the ports it means the tf2automatic applications are exposed locally only.
+    ports:
+      - '127.0.0.1:5672:5672'
+      - '127.0.0.1:15672:15672'
+    environment:
+      RABBITMQ_DEFAULT_USER: 'test'
+      RABBITMQ_DEFAULT_PASS: 'test'
+    volumes:
+      - 'rabbitmq:/var/lib/rabbitmq'
+    healthcheck:
+      test: ["CMD-SHELL", "rabbitmq-diagnostics check_port_connectivity"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7.2.4-alpine
+    command: redis-server --requirepass test --appendonly yes --maxmemory-policy noeviction
+    expose:
+      - '6379'
+    volumes:
+      - redis:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  bot-manager:
+    image: ghcr.io/tf2-automatic/bot-manager:latest
+    pull_policy: always
+    restart: unless-stopped
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    expose:
+      - '3000'
+    ports:
+      - '127.0.0.1:3001:3000'
+    environment:
+      EVENTS_TYPE: 'rabbitmq'
+      REDIS_HOST: 'redis'
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: 'test'
+      RABBITMQ_HOST: 'rabbitmq'
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: 'test'
+      RABBITMQ_PASSWORD: 'test'
+      RABBITMQ_VHOST: ''
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-S', 'http://127.0.0.1:3000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  bot1:
+    image: ghcr.io/tf2-automatic/bot:latest
+    pull_policy: always
+    restart: unless-stopped
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      bot-manager:
+        condition: service_healthy
+    expose:
+      - '3000'
+    ports:
+      - '127.0.0.1:3000:3000'
+    environment:
+      DEBUG: true
+      # Input your bot's credentials here
+      STEAM_USERNAME: ''
+      STEAM_PASSWORD: ''
+      STEAM_SHARED_SECRET: ''
+      STEAM_IDENTITY_SECRET: ''
+      EVENTS_TYPE: 'rabbitmq'
+      RABBITMQ_HOST: 'rabbitmq'
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: 'test'
+      RABBITMQ_PASSWORD: 'test'
+      RABBITMQ_VHOST: ''
+      STORAGE_TYPE: 'local'
+      STORAGE_LOCAL_PATH: '/data'
+      BOT_MANAGER_ENABLED: true
+      BOT_MANAGER_URL: 'http://bot-manager:3000'
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-S', 'http://127.0.0.1:3000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
