@@ -134,3 +134,7 @@ config/bptf-listings.json
 config/database.json
 config/bot.json
 config/mptf.json
+config/autokeys.json
+config/autokeys.json
+config/crafting.json
+config/partialPricing.json
