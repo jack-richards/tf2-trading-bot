@@ -1,4 +1,17 @@
 # TF2 Trading Bot
+<div align="center"><img src="https://github.com/jack-richards/bptf-autopricer/assets/58331725/203fe808-30ff-4d7d-868c-a3ef6d31497d" alt="logo" style="width: 280px; height: 320px; display: block; margin-left: auto; margin-right: auto;"></div>
+
+#
+<div align="center">
+  
+[![Version](https://img.shields.io/github/v/release/jack-richards/tf2-trading-bot.svg)](https://github.com/jack-richards/tf2-trading-bot/releases)
+[![GitHub forks](https://img.shields.io/github/forks/jack-richards/tf2-trading-bot)](https://github.com/jack-richards/tf2-trading-bot/network/members)
+[![GitHub Repo stars](https://img.shields.io/github/stars/jack-richards/tf2-trading-bot)](https://github.com/jack-richards/tf2-trading-bot/stargazers)
+[![GitHub issues](https://img.shields.io/github/issues/jack-richards/tf2-trading-bot)](https://github.com/jack-richards/tf2-trading-bot/issues)
+[![License](https://img.shields.io/github/license/jack-richards/tf2-trading-bot.svg)](https://opensource.org/licenses/MIT)
+[![Known Vulnerabilities](https://snyk.io/test/github/jack-richards/tf2-trading-bot/badge.svg)](https://snyk.io/test/github/jack-richards/tf2-trading-bot)
+
+</div>
 
 This is an automated trading bot designed to work with the **tf2-automatic** platform, enabling seamless Team Fortress 2 (TF2) trade automation. The bot listens for events from **tf2-automatic**, processes trade offers, manages inventory, and handles listings using **bptf-manager** for **backpack.tf** interactions.
 
