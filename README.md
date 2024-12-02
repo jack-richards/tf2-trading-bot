@@ -13,9 +13,15 @@
 
 </div>
 
-This is an automated trading bot designed to work with the **tf2-automatic** platform, enabling seamless Team Fortress 2 (TF2) trade automation. The bot listens for events from **tf2-automatic**, processes trade offers, manages inventory, and handles listings using **bptf-manager** for **backpack.tf** interactions.
+TF2 Trading Bot is a fully automated trading bot built to work seamlessly with the tf2-automatic platform. The bot listens for events from tf2-automatic, processes trade offers, manages inventory, and handles listings using bptf-manager for backpack.tf interactions.
 
-To fully set up the bot, you will need to configure both the **tf2-automatic** platform's **bot**, **bot manager**, and **bptf-manager** applications.
+The bot leverages my bptf-autopricer application to provide accurate and competitive real-time pricing data. Together, these components form a comprehensive, end-to-end solution for TF2 trade automation, being designed with dual usage in mind.
+
+To set up the bot, you will need to configure the following:
+- tf2-automatic bot
+- tf2-automatic bot manager
+- bptf-manager
+- bptf-autopricer
 
 Detailed instructions on setting up these requirements will be provided further down.
 
