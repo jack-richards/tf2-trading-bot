@@ -54,12 +54,18 @@ export default class Bans {
     }
 
     async isBanned(steamID: string): Promise<IsBanned> {
-        const siteResults: SiteResult[] = await Promise.all([
+        const siteResultsPromises: Promise<SiteResult>[] = [
             this.checkBackpackTF(steamID),
             this.checkSteamRep(steamID),
             this.checkAutobotTF(steamID),
-            this.checkMarketplaceTF(steamID),
-        ]);
+        ];
+        
+        // User can leave this particular key blank since they may not be a seller on mptf.
+        if (this.mptfApiKey !== "") {
+            siteResultsPromises.push(this.checkMarketplaceTF(steamID));
+        }
+        
+        const siteResults: SiteResult[] = await Promise.all(siteResultsPromises);
 
         const anySuccessfulCheck = siteResults.some(result => result.success);
         const isBanned = siteResults.some(result => result.success && result.isBanned);
@@ -89,7 +95,7 @@ export default class Bans {
                     steamids: steamID,
                 },
                 headers: {
-                    'User-Agent': 'SirFroggy@1.0',
+                    'User-Agent': 'tf2-trading-bot@1.0',
                     'Cookie': `user-id=${this.userID}`,
                 },
             });
@@ -149,7 +155,7 @@ export default class Bans {
     
             const response = await axios.post('https://marketplace.tf/api/Bans/GetUserBan/v2', null, {
                 headers: {
-                    'User-Agent': 'SirFroggy@1.0',
+                    'User-Agent': 'tf2-trading-bot@1.0',
                 },
                 params: {
                     key: this.mptfApiKey,
