@@ -249,7 +249,7 @@ To launch the **tf2-trading-bot** run:
 node app.js
 ```
 
-I would recommend using [PM2](https://pm2.keymetrics.io/), once it has been installed run:
+**As an alternative** to running the application directly with node, I would recommend using [PM2](https://pm2.keymetrics.io/), once it has been installed run:
 ```bash
 pm2 start app.js
 ```
