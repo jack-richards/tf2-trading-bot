@@ -27,36 +27,40 @@ Detailed instructions on setting up these requirements will be provided further 
 
 ## Features
 
-### 1. **Automatic Metal Crafting**
-   - The bot crafts metal automatically after each trade to maintain configured minimum metal amounts.
+### ⚡ **Blazing Fast Trade Processing**
+   - The bot processes trade offers quickly, ensuring minimal delay in evaluating and responding to incoming trade events. This allows for efficient and timely trades.
+   - Processes incoming trade offers, using pricing data from **bptf-autopricer** to determine whether a trade is favourable or not.
 
-### 2. **Listing Management**
+### 🛒 **Listing Management**
    - **Create, Delete, and Update Listings**: The bot manages **backpack.tf** listings based on real-time trade events, ensuring items are listed or removed accordingly.
 
-### 3. **Autokeys**
+### ⚙️ **Automatic Metal Crafting**
+   - The bot crafts metal automatically after each trade to maintain configured minimum metal amounts.
+
+### 🤖 Integration with bptf-autopricer
+   - The bot integrates seamlessly with my battle-tested [bptf-autopricer](https://github.com/jack-richards/bptf-autopricer) application to provide accurate and competitive pricing. This ensures that the bot stays up-to-date with current market trends and can evaluate trade offers effectively.
+   - Additionally, bptf-autopricer serves as the central interface for managing the bot’s inventory preferences. Users can easily add or remove items to buy and sell (and have them autopriced) directly through bptf-autopricer, streamlining the pricelist configuration process.
+     
+### 🔑 **Autokeys**
    - Automatically creates **buy** and **sell listings** for keys based on the number of keys and refined metal in your inventory.
      - E.g., A key listing will be created selling _n_ keys when the bot has _n_ keys over its configured maximum amount and less than its minimum refined metal amount.
    - Minimum and maximums are fully configurable via the `autokeys.json` config file.
 
-### 4. **Trade Offer Processing**
-   - Processes incoming trade offers, using pricing data from **bptf-autopricer** to determine whether a trade is favorable or not.
+### 💰 **Partial Pricing for Minimum Profit**
+   - Protects against selling an item for less than the price it was bought for, particularly in response to changing market conditions. The bot adjusts the selling price to the item's purchase price plus 1 scrap (0.11 refined).
+   - The duration an item remains "partially priced" can be configured in the `partialPricing.json` config file.
 
-### 5. **Partial Pricing for Minimum Profit**
-   - Enforces a minimum profit margin by adjusting the sell price of items purchased for a higher price than the current market value.
-
-### 6. **Trade Validation and User Ban Checking**
+### ❌ **Trade Validation and User Ban Checking**
    - Rejects trade offers from banned users, ensuring that the bot does not get banned through interacting with these known bad-actors.
 
-### 7. **Inventory Management**
+### 📦 **Inventory Management**
    - Tracks "in-use" items during active trades, preventing them from being used for crafting or other trades. Thereby ensuring trades are less likely to become invalidated through items being traded away before an offer is accepted.
 
-### 8. **Stock Limit**
-   - Currently the bot will only hold 1 of each item at a time, maintaining a stock limit of 1.
+### 📉 **Stock Limit**
+   - Currently, the bot will only hold 1 of each item at a time, maintaining a stock limit of 1.
    - This is a static limit because I originally made this bot for my personal use, and found it to be a good set-up. However, feel free to edit the code to change this. 
 
-## Integration with **bptf-autopricer**
-
-The bot retrieves real-time pricing data via **Socket.io events** from **bptf-autopricer**, enabling accurate evaluations of item value. We also use its pricelist to determine what items the bot should buy & sell.
+## **bptf-autopricer**
 
 For more details regarding the pricer, visit my [bptf-autopricer GitHub project page](https://github.com/jack-richards/bptf-autopricer).
 
@@ -64,11 +68,11 @@ For more details regarding the pricer, visit my [bptf-autopricer GitHub project 
 Official setup instructions for **bptf-autopricer** can be found in the ``README.MD`` file on the [GitHub project page](https://github.com/jack-richards/bptf-autopricer/blob/main/README.md).
 
 ## Docker & Docker Compose
-The **tf2-automatic** applications are distributed via docker files, which requires docker to run.  
+The **tf2-automatic** applications are distributed via docker files, which require docker to run.  
 
 On Windows, you can download and use [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/).  
 
-On Linux you can follow this [wiki](https://docs.docker.com/desktop/setup/install/linux/).
+On Linux, you can follow this [wiki](https://docs.docker.com/desktop/setup/install/linux/).
 
 Guidance on how to run containers (docker-compose.yml files) can be viewed [here](https://docs.docker.com/get-started/workshop/08_using_compose/#run-the-application-stack). 
 
