@@ -1,0 +1,10 @@
+{
+    "steamid": "your bots steam id 64",
+    "token": "your bots bptf token",
+    "apiKey": "your bots bptf api key",
+    "userAgent": "",
+    "host": "127.0.0.1",
+    "port": 9876,
+    "buyDetails": "Buying %amount% %item% for %price%.",
+    "sellDetails": "Selling %amount% %item% for %price%."
+}

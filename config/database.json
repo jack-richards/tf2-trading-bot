@@ -1,0 +1,8 @@
+{
+    "schema": "tf2",
+    "host": "localhost",
+    "port": 5432,
+    "name": "trading_bot",
+    "user": "postgres",
+    "password": "your database password"
+}
