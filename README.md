@@ -15,7 +15,7 @@
 
 TF2 Trading Bot is a fully automated trading bot built to work seamlessly with the tf2-automatic platform. The bot listens for events from tf2-automatic, processes trade offers, manages inventory, and handles listings using bptf-manager for backpack.tf interactions.
 
-The bot leverages my bptf-autopricer application to provide accurate and competitive real-time pricing data. Together, these components form a comprehensive, end-to-end solution for TF2 trade automation, being designed with dual usage in mind.
+The bot leverages my [bptf-autopricer application](https://github.com/jack-richards/bptf-autopricer/tree/tf2-trading-bot) to provide accurate and competitive real-time pricing data. Together, these components form a comprehensive, end-to-end solution for TF2 trade automation, being designed with dual usage in mind.
 
 To set up the bot, you will need to configure the following:
 - tf2-automatic bot
@@ -62,10 +62,10 @@ Detailed instructions on setting up these requirements will be provided further 
 
 ## **bptf-autopricer**
 
-For more details regarding the pricer, visit my [bptf-autopricer GitHub project page](https://github.com/jack-richards/bptf-autopricer).
+For more details regarding the pricer, visit my [bptf-autopricer GitHub project page]([https://github.com/jack-richards/bptf-autopricer](https://github.com/jack-richards/bptf-autopricer/tree/tf2-trading-bot)). Make sure to use the version clearly labelled as being for this project (the tf2-trading-bot branch).
 
 ### Setup Instructions for **bptf-autopricer**
-Official setup instructions for **bptf-autopricer** can be found in the ``README.MD`` file on the [GitHub project page](https://github.com/jack-richards/bptf-autopricer/blob/main/README.md).
+Official setup instructions for **bptf-autopricer** can be found in the ``README.MD`` file on the [GitHub project page](https://github.com/jack-richards/bptf-autopricer/blob/tf2-trading-bot/README.md).
 
 ## Docker & Docker Compose
 The **tf2-automatic** applications are distributed via docker files, which require docker to run.  
@@ -270,7 +270,7 @@ pm2 list
 You should see the trading bot as one of the processes, you can shut it down with ``pm2 stop [application name]`` or ``pm2 delete [application name]``
 
 ## How to add items to buy & sell?
-Simply add the item to be priced by the bptf-autopricer application through one of the methods shown [here](https://github.com/jack-richards/bptf-autopricer/tree/main?tab=readme-ov-file#adding-items-to-price).
+Simply add the item to be priced by the bptf-autopricer application through one of the methods shown [here](https://github.com/jack-richards/bptf-autopricer/tree/tf2-trading-bot?tab=readme-ov-file#adding-items-to-price).
 
 ## ⭐ Show Your Support
 If you find the project useful, please consider leaving a star! ⭐
