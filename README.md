@@ -38,7 +38,7 @@ Detailed instructions on setting up these requirements will be provided further 
    - The bot crafts metal automatically after each trade to maintain configured minimum metal amounts.
 
 ### 🤖 Integration with bptf-autopricer
-   - The bot integrates seamlessly with my battle-tested [bptf-autopricer](https://github.com/jack-richards/bptf-autopricer) application to provide accurate and competitive pricing. This ensures that the bot stays up-to-date with current market trends and can evaluate trade offers effectively.
+   - The bot integrates seamlessly with my battle-tested [bptf-autopricer](https://github.com/jack-richards/bptf-autopricer/tree/tf2-trading-bot) application to provide accurate and competitive pricing. This ensures that the bot stays up-to-date with current market trends and can evaluate trade offers effectively.
    - Additionally, bptf-autopricer serves as the central interface for managing the bot’s inventory preferences. Users can easily add or remove items to buy and sell (and have them autopriced) directly through bptf-autopricer, streamlining the pricelist configuration process.
      
 ### 🔑 **Autokeys**
