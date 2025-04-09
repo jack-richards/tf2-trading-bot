@@ -34,7 +34,7 @@ services:
       retries: 5
 
   bot-manager:
-    image: ghcr.io/tf2-automatic/bot-manager:latest
+    image: ghcr.io/tf2-automatic/bot-manager:9.0.0
     pull_policy: always
     restart: unless-stopped
     depends_on:
@@ -63,7 +63,7 @@ services:
       retries: 5
 
   bot1:
-    image: ghcr.io/tf2-automatic/bot:latest
+    image: ghcr.io/tf2-automatic/bot:9.0.0
     pull_policy: always
     restart: unless-stopped
     depends_on:

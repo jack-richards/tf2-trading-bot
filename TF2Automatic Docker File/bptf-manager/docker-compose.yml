@@ -10,7 +10,7 @@ services:
     volumes:
       - redis:/data
   bptf-manager:
-    image: ghcr.io/tf2-automatic/bptf-manager:latest
+    image: ghcr.io/tf2-automatic/bptf-manager:9.0.0
     restart: unless-stopped
     depends_on:
       - redis
