@@ -270,7 +270,10 @@ pm2 list
 You should see the trading bot as one of the processes, you can shut it down with ``pm2 stop [application name]`` or ``pm2 delete [application name]``
 
 ## How to add items to buy & sell?
-Simply add the item to be priced by the bptf-autopricer application through one of the methods shown [here](https://github.com/jack-richards/bptf-autopricer/tree/tf2-trading-bot?tab=readme-ov-file#adding-items-to-price).
+Add the item to be priced by the bptf-autopricer application through one of the methods shown [here](https://github.com/jack-richards/bptf-autopricer/tree/tf2-trading-bot?tab=readme-ov-file#adding-items-to-price).
+
+## How do I stop banking an item?
+Follow the guidance [here](https://github.com/jack-richards/bptf-autopricer/tree/tf2-trading-bot?tab=readme-ov-file#to-stop-banking-an-item).
 
 ## ⭐ Show Your Support
 If you find the project useful, please consider leaving a star! ⭐
