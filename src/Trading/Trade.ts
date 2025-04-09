@@ -420,7 +420,7 @@ export class Trade {
                     return true;
                 }
             } else if (steamID && token) {
-                const response = await axios.get(`http://127.0.0.1:3000/escrow/${steamID}/${token}`);
+                const response = await axios.get(`http://127.0.0.1:3000/escrow/${steamID}`, { params: { token: token } });
                 return response.data.escrowDays > 0;
             } else {
                 throw new Error('Missing parameters needed to check escrow.');
